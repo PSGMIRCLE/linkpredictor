@@ -83,9 +83,10 @@ bool ActorGraph::loadFromFile(const char* in_filename, bool use_weighted_edges) 
             currActor = new Node(actor_name);
 
             //store index in backing array
-            currActor->index = actors.size();                   //goldfish
+            currActor->index = actors.size();
 
             actors.push_back(currActor);
+            actorByName[actor_name] = currActor;
         }
 
         //flag if movie was found
@@ -123,6 +124,9 @@ bool ActorGraph::loadFromFile(const char* in_filename, bool use_weighted_edges) 
         return false;
     }
     infile.close();
+
+    //create the NxN matrix
+    matrix = createMatrix();
 
     return true;
 }

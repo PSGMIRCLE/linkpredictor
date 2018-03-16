@@ -24,6 +24,7 @@ public:
   Edge* prevEdge = nullptr;
 
   int index;
+  int degree = 0;
 
   Node() {}
 

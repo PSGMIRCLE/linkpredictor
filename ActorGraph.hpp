@@ -20,6 +20,7 @@
 #include "Edge.hpp"
 #include "MatrixMultiply.hpp"
 #include <algorithm>
+#include <ctime>
 
 // Maybe include some data structures here
 
@@ -32,6 +33,13 @@ public:
     }
 };
 
+class Compare2 {
+public:
+    bool operator()(const Node* x, const Node* y) const {
+        return x->degree > y->degree;
+    }
+};
+
 class ActorGraph {
 protected:
 
@@ -39,7 +47,10 @@ protected:
 
 public:
     vector<Node*> actors;
+    unordered_map<string, Node*> actorByName;
     unordered_map<string, Edge*> movies;
+
+    vector<vector<int>> matrix;
 
     ActorGraph(void);
 
@@ -168,138 +179,268 @@ public:
         return returnString;
     }
 
-    //check if two nodes are related by at least one movie
-    bool isRelated(Node* one, Node* two) {
-        //for each of actor one's movies
-        for(Edge* e : one->edges) {
-            //for each of the actors in those movies
-            for(Node* n : e->actors) {
-                //if connection is found
-                if(n == two) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-
     //create the full adjacency matrix
     vector<vector<int>> createMatrix() {
-        //initialize with actors.size() as dimensions
-        vector<vector<int>> am(actors.size(), vector<int>(actors.size()));
 
-        //for each index
-        for(int i = 0; i < actors.size(); i++) {
-            for(int j = 0; j < actors.size(); j++) {
-                //if not comparing same actor and there is a relation between
-                //actors
-                if(i != j && isRelated(actors[i], actors[j])) {
-                    //index is 1
-                    am[i][j] = 1;
-                }
-                else {
-                    //else index is 0
-                    am[i][j] = 0;
+        //initialize with actors.size() as dimensions with 0's
+        vector<vector<int>> am(actors.size(), vector<int>(actors.size(), 0));
+
+        //for each actor in list of actors
+        for(Node* actor : actors) {
+            //for each of their movies
+            for(Edge* edge : actor->edges) {
+                //for each of the actors in those movies
+                for(Node* n : edge->actors) {
+                    //if we are not comparing the actor with him/herself
+                    if(actor->name != n->name) {
+                        //set matrix at that position to 1
+                        am[actor->index][n->index] = 1;
+                    }
                 }
             }
         }
-
-        //DEBUG PRINT, REMOVE LATER NIGGER
-        for(int i = 0; i < actors.size(); i++) {
-            for(int j = 0; j < actors.size(); j++) {
-                cout << " " << am[i][j];
-            }
-            cout << endl;
-        }
-        cout << endl;
 
         return am;
     }
 
 
     //create a 2D array to represent an actor's row in the adjacency matrix
-    //will be 1 x N dimensions
-    vector<vector<int>> createMatrix(int index) {
+    //will be indices.size() x N dimensions
+    vector<vector<int>> createMatrix(vector<int> indices) {
 
         //initialize with actors.size() as dimensions
-        vector<vector<int>> am(1, vector<int>(actors.size()));
+        vector<vector<int>> am(indices.size(), vector<int>(actors.size()));
 
         //for each index
-        for(int j = 0; j < actors.size(); j++) {
-            //if not comparing same actor and there is a relation between
-            //actors
-            if(index != j && isRelated(actors[index], actors[j])) {
-                //index is 1
-                am[0][j] = 1;
-            }
-            else {
-                //else index is 0
-                am[0][j] = 0;
-            }
+        for(int i = 0; i < indices.size(); i++) {
+            //copy that row from total matrix
+            am[i] = matrix[indices[i]];
         }
+        return am;
+    }
 
-        //DEBUG PRINT, REMOVE LATER NIGGER
-        for(int i = 0; i < am.size(); i++) {
-            for(int j = 0; j < actors.size(); j++) {
-                cout << " " << am[i][j];
+    //prints out a given 2D matrix (for debugging)
+    void printMatrix(vector<vector<int>> matrix) {
+        for(int i = 0; i < matrix.size(); i++) {
+            for(int j = 0; j < matrix[0].size(); j++) {
+                cout << matrix[i][j] << " ";
             }
             cout << endl;
         }
         cout << endl;
-
-        return am;
-    }
-
-    vector<Node*> predictExisting(Node* actor) {
-
-        vector<vector<int>> adjMatrix = createMatrix(actor->index);
-        vector<vector<int>> totalMatrix = createMatrix();
-        vector<vector<int>> resMatrix;
-        
-        MatrixOperations<int> m(adjMatrix, totalMatrix);
-
-        resMatrix = m.matrixMultiply();
-        
-        for(vector<int> v : resMatrix){
-            for(int i : v){
-                cout << i << " ";
-            }
-            cout << endl;
-        }   
-        
-        vector<pair<int, Node*>> copy;
+    } 
 
 
-        for(int i = 0; i < actors.size(); i++) {
-            if(actor->index != i) {
-                copy.push_back(make_pair(resMatrix[0][i], actors[i]));
-            }
-        }   
+    //predicts top 4 actors using existing relationships
+    vector<vector<Node*>> predictExisting(vector<Node*> queryActors) {
 
-        sort(copy.begin(), copy.end(), [] (const pair<int, Node*> &p1, const pair<int, Node*> &p2) {
-        if(p1.first == p2.first) {
-            return p1.second->name > p2.second->name;
+        //convert nodes to index int values
+        vector<int> indices;
+        for(Node* n : queryActors) {
+            indices.push_back(n->index);
         }
-        return p1.first < p2.first;
-        });
-        
-        vector<Node*> topFour;
 
-        while(topFour.size() < 4){
-            if(!copy.empty()){
-                if(copy.back().first != 0){
-                    topFour.push_back(copy.back().second);
+        //create the inputsize x N matrix
+        vector<vector<int>> adjMatrix = createMatrix(indices);
+        vector<vector<int>> resMatrix; 
+
+        //perform matrix multiplication
+        MatrixOperations<int> m(adjMatrix, matrix);
+        resMatrix = m.matrixMultiply();
+
+        //create 2D vector to hold pairs of #of common neighbors with
+        //corresponding actor
+        vector<vector<pair<int, Node*>>> copy(indices.size());
+
+        //for each index
+        for(int i = 0; i < indices.size(); i++) {
+            for(int j = 0; j < actors.size(); j++) {
+                //not on diagonal line i = j
+                if(indices[i] != j) {
+                    //if actor[i] and actor[j] are a direct link (1 away)
+                    if(matrix[indices[i]][j] == 1) {
+                        //push to the copy the actors we care about
+                        copy[i].push_back(make_pair(resMatrix[i][j], actors[j]));
+                    }
                 }
-                copy.pop_back();
             }
-            else{
-                break;
+        }
+
+        //sort every vector for each query actor
+        for(int i = 0; i < indices.size(); i++) {
+            //define sort function and call it on each vector
+            sort(copy[i].begin(), copy[i].end(), []
+                (const pair<int, Node*> &p1, const pair<int, Node*> &p2) {
+                //if number of common neighbors is same, then compare alphabetically
+                if(p1.first == p2.first) {
+                    return p1.second->name > p2.second->name;
+                }
+                //else just compare number of common neighbors
+                return p1.first < p2.first;
+            });
+        }
+ 
+        //new vectors to truncate til top 4
+        vector<vector<Node*>> topFour(indices.size());
+
+        //for each vector
+        for(int i = 0; i < indices.size(); i++) {
+            //while size is less than 4
+            while(topFour[i].size() < 4){
+                //when copy is not empty
+                if(!copy[i].empty()){
+                    if(copy[i].back().first != 0){
+                        //push to top four vector
+                        topFour[i].push_back(copy[i].back().second);
+                    }
+                    copy[i].pop_back();
+                }
+                else{
+                    break;
+                }
             }
         }
 
         return topFour;
     }
+
+
+    vector<vector<Node*>> predictNew(vector<Node*> queryActors) {
+
+        //change nodes to index int values
+        vector<int> indices;
+        for(Node* n : queryActors) {
+            indices.push_back(n->index);
+        }
+
+        //create reduced matrix
+        vector<vector<int>> adjMatrix = createMatrix(indices);
+        vector<vector<int>> resMatrix; 
+
+        //perform matrix multiplication
+        MatrixOperations<int> m(adjMatrix, matrix);
+        resMatrix = m.matrixMultiply();
+
+        //copy vectors
+        vector<vector<pair<int, Node*>>> copy(indices.size());
+
+        //push to copies the actors we care about
+        for(int i = 0; i < indices.size(); i++) {
+            for(int j = 0; j < actors.size(); j++) {
+                if(indices[i] != j) {
+                    //if actor[i] and actor[j] are not connected by a
+                    //direct link
+                    if(matrix[indices[i]][j] == 0) {
+                        copy[i].push_back(make_pair(resMatrix[i][j],
+                            actors[j]));
+                    }
+                }
+            }
+        }
+
+        for(int i = 0; i < indices.size(); i++) {
+            //define sort function and call it on each vector
+            sort(copy[i].begin(), copy[i].end(), []
+                (const pair<int, Node*> &p1, const pair<int, Node*> &p2) {
+                //if number of common neighbors is same, then compare alphabetically
+                if(p1.first == p2.first) {
+                    return p1.second->name > p2.second->name;
+                }
+                //else just compare number of common neighbors
+                return p1.first < p2.first;
+            });
+        }
+
+        //vector for top 4 actors
+        vector<vector<Node*>> topFour(indices.size());
+
+        //for each vector
+        for(int i = 0; i < indices.size(); i++) {
+            //push back at most 4 of the actors with highest common
+            //neighbors
+            while(topFour[i].size() < 4){
+                if(!copy[i].empty()){
+                    if(copy[i].back().first != 0){
+                        topFour[i].push_back(copy[i].back().second);
+                    }
+                    copy[i].pop_back();
+                }
+                else{
+                    break;
+                }
+            }
+        }
+
+        return topFour;
+    }
+
+    //set degrees to each actor
+    void getDegrees() {
+        //iterate through each actor
+        for(Node* actor : actors) {
+            unordered_map<string, Node*> known;
+
+            //search for connections
+            for(Edge* e : actor->edges) {
+                for(Node* n : e->actors) {
+                    if(known.find(n->name) == known.end() &&
+                        n->name != actor->name) {
+                        known[n->name] = n;        
+                    }
+                }
+            }
+
+            actor->degree = known.size();
+        }
+    }
+
+
+    //determine invitees using k-core of graph
+    vector<Node*> calculate(int k) {
+
+        vector<Node*> res;
+        
+        //get degrees for each actor
+        getDegrees();
+
+        //push every actor into pq
+        priority_queue<Node*, vector<Node*>, Compare2> pq;
+        for(Node* actor : actors) {
+            pq.push(actor);
+        }
+
+        //while smallest degree is less than k
+        while(pq.top()->degree < k && !pq.empty()) {
+            Node* curr = pq.top();
+            //get row for that node
+            for(int i = 0; i < matrix.size(); i++) {
+                //for each related node, subtract their degree by 1
+                if(matrix[curr->index][i] == 1 && actors[i]->degree > 0) {
+                    actors[i]->degree--;
+                }
+            }
+            //pop that smallest degree node
+            pq.pop();
+        }
+
+        //while pq is non-empty
+        while(!pq.empty()) {
+            //push nodes with degree > k into res vector
+            if(pq.top()->degree > k) {
+                res.push_back(pq.top());
+            }
+            pq.pop();
+        }
+
+        //sort names alphabetically
+        sort(res.begin(), res.end(), []
+            (const Node* p1, const Node* p2) {
+            //if number of common neighbors is same, then compare alphabetically
+            return p1->name < p2->name;
+        });
+
+        return res;
+    } 
   
 };
 

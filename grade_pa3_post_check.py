@@ -38,8 +38,10 @@ signal.signal(signal.SIGALRM, timeout_handler)
 def check_prediction(ref_prediction,student_prediction):
 	ref_values = ref_prediction.split("\t")
 	ref_values = [val for val in ref_values if val is not '']
+	ref_values = [val for val in ref_values if val is not 'NULL']
 	student_values = student_prediction.split("\t")
 	student_values =  [val for val in student_values if val is not '']
+	student_values =  [val for val in student_values if val is not 'NULL']
 	if len(ref_values)!=len(student_values) :
 		return False
 	for i in range(len(ref_values)):
